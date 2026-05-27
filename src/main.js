@@ -5,6 +5,7 @@ import { LightManager } from "./core/LightManager.js";
 import { SkySettings } from './utils/skySet.js';
 import { PaneConstructor } from './utils/PaneConstructor.js';
 import { ModelLoader } from './core/ModelLoader.js';
+import { CollisionManager } from './core/CollisionManager.js';
 
 
 class Main{
@@ -21,6 +22,7 @@ class Main{
 
         this.skySettings = null;
         this.modelLoader = null;
+        this.collisionManager = null;
         
         this.init()
     }
@@ -44,8 +46,11 @@ class Main{
         this.skySettings.createStars();
 
         this.modelLoader = new ModelLoader(scene);
+        this.collisionManager = new CollisionManager(scene);
+
         this.modelLoader.load(0).then((ship) => {
             this.ship = ship;
+            this.collisionManager.addSceneObjects();
             this.createPane(this.ship);
         });
 
@@ -70,9 +75,17 @@ class Main{
     animate(){
         requestAnimationFrame(() => this.animate());
         this.time += 0.016;
+        this.collisionManager.addSceneObjects();
+        this.collisionManager.capturePreviousPositions();
         
         this.cameraManager.update();
         this.paneConstructor?.update();
+
+        const resolvedObjects = this.collisionManager.resolveMovedObjects();
+
+        if (this.ship && resolvedObjects.has(this.ship)) {
+            this.paneConstructor?.setTargetPosition(this.ship.position);
+        }
         
         this.renderer.render(
             this.sceneManager.getScene(),

@@ -83,6 +83,13 @@ export class PaneConstructor {
         this.object.rotation.z += (this.degreesToRadians(this.targetRotation.z) - this.object.rotation.z) * this.speed;
     }
 
+    setTargetPosition(position) {
+        this.targetPosition.x = position.x;
+        this.targetPosition.y = position.y;
+        this.targetPosition.z = position.z;
+        this.pane.refresh();
+    }
+
     degreesToRadians(value) {
         return Number(value) * Math.PI / 180;
     }
