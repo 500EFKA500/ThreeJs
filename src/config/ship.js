@@ -1,7 +1,8 @@
 export const SHIP_CONFIG = {
     type: {
         scout: {
-            radius: 1,
+            width: 3,
+            height: 3,
         },
     },
 };

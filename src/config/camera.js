@@ -18,8 +18,5 @@ export const CAMERA_CONFIG = {
         zoomSpeed: 1,
         enablePan: true,
         rotateSpeed: 0.5,
-        flyMovementSpeed: 8,
-        flyRollSpeed: 0.8,
-        flyDragToLook: true,
     }
 };

@@ -12,7 +12,6 @@ export class TextureLoader {
 
         const textures = {};
         for (const mapKey of Object.keys(maps)) {
-            if (!maps[mapKey]) continue;
             const texture = this.loadMap(mapKey, materialKey);
             if (texture) textures[mapKey] = texture;
         }
@@ -22,15 +21,6 @@ export class TextureLoader {
     loadMap(mapKey, materialKey) {
         const url = getTextureUrl(materialKey, mapKey);
         if (!url) return null;
-        const texture = this.texture_loader.load(url);
-
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
-
-        if (mapKey === 'albedo') {
-            texture.colorSpace = THREE.SRGBColorSpace;
-        }
-
-        return texture;
+        return this.texture_loader.load(url);
     }
 }

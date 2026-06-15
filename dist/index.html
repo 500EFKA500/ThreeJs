@@ -1,24 +1,148 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>three_js</title>
-    <link rel="icon" href="data:,">
-    <style>
-        body { margin: 0; overflow: hidden; }
-    </style>
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "./node_modules/three/build/three.module.js",
-                "three/addons/": "./node_modules/three/examples/jsm/"
-            }
-        }
-    </script>
-  <script type="module" crossorigin src="/assets/index-CSyPok9w.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#060915">
+  <title>Space Command</title>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/vendor/three/build/three.module.js",
+        "three/addons/": "/vendor/three/examples/jsm/",
+        "socket.io-client": "/vendor/socket.io-client/socket.io.esm.min.js"
+      }
+    }
+  </script>
+  <script type="module" crossorigin src="/assets/index-Nf1l0xK3.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CSgD6MoM.css">
 </head>
 <body>
+  <div id="space-background" aria-hidden="true"></div>
+  <main id="app">
+    <section id="auth-screen" class="screen auth-screen">
+      <div class="brand-block">
+        <div class="brand-mark"><span></span><span></span><span></span></div>
+        <p class="eyebrow">ORBITAL DEFENCE NETWORK</p>
+        <h1>SPACE<br><strong>COMMAND</strong></h1>
+        <p class="brand-copy">Станьте пилотом дальнего рубежа. Улучшайте корабль, входите в сектор и сражайтесь вместе с другими игроками.</p>
+        <div class="signal"><i></i> Сеть сектора активна</div>
+      </div>
+
+      <div class="auth-card glass">
+        <div class="auth-tabs">
+          <button class="tab active" data-auth-mode="login">Вход</button>
+          <button class="tab" data-auth-mode="register">Регистрация</button>
+        </div>
+        <div class="panel-heading">
+          <span>ДОСТУП К СИСТЕМЕ</span>
+          <h2 id="auth-title">С возвращением, пилот</h2>
+          <p id="auth-subtitle">Введите данные своего аккаунта</p>
+        </div>
+        <form id="auth-form">
+          <label>Позывной
+            <input id="username" name="username" autocomplete="username" minlength="3" maxlength="18" placeholder="Например, Orion" required>
+          </label>
+          <label>Пароль
+            <input id="password" name="password" type="password" autocomplete="current-password" minlength="6" maxlength="72" placeholder="••••••••" required>
+          </label>
+          <p id="auth-error" class="form-error" role="alert"></p>
+          <button id="auth-submit" class="primary-button" type="submit">ВОЙТИ В СИСТЕМУ <span>→</span></button>
+        </form>
+        <p class="security-note">Зашифрованный канал · Сессия защищена</p>
+      </div>
+    </section>
+
+    <section id="menu-screen" class="screen menu-screen hidden">
+      <header class="topbar">
+        <a class="compact-brand" href="#"><span class="brand-mark small"><i></i><i></i><i></i></span> SPACE <strong>COMMAND</strong></a>
+        <div class="pilot-summary">
+          <span class="online-dot"></span>
+          <div><small>ПИЛОТ</small><strong id="pilot-name">—</strong></div>
+          <div class="level-badge">LVL <strong id="pilot-level">1</strong></div>
+          <div class="credits"><span>◆</span> <strong id="pilot-credits">0</strong></div>
+        </div>
+      </header>
+
+      <div class="menu-layout">
+        <nav class="main-nav">
+          <p class="eyebrow">ЦЕНТР УПРАВЛЕНИЯ</p>
+          <h2>Выберите<br>назначение</h2>
+          <button class="nav-card play-card active" data-panel="hangar">
+            <span class="nav-index">01</span><span><strong>ИГРАТЬ</strong><small>Войти в боевой сектор</small></span><b>→</b>
+          </button>
+          <button class="nav-card" data-panel="upgrades">
+            <span class="nav-index">02</span><span><strong>ПРОКАЧКА</strong><small>Модули и характеристики</small></span><b>+</b>
+          </button>
+          <button class="nav-card" data-panel="settings">
+            <span class="nav-index">03</span><span><strong>НАСТРОЙКИ</strong><small>Управление и интерфейс</small></span><b>⌁</b>
+          </button>
+          <button id="logout-button" class="nav-card logout-card">
+            <span class="nav-index">04</span><span><strong>ВЫХОД</strong><small>Завершить сеанс</small></span><b>×</b>
+          </button>
+        </nav>
+
+        <section id="menu-content" class="content-panel glass">
+          <div id="hangar-panel" class="menu-panel">
+            <div class="panel-heading">
+              <span>АКТИВНЫЙ КОРАБЛЬ</span>
+              <h2>SCOUT // MK-I</h2>
+              <p>Маневренный разведчик дальнего радиуса действия.</p>
+            </div>
+            <div id="ship-preview" class="ship-preview">
+              <div class="scan-ring"></div>
+              <div class="ship-silhouette">▲</div>
+            </div>
+            <div class="stats-row">
+              <div><small>КОРПУС</small><strong id="stat-hull">100</strong><span class="stat-bar"><i style="width:72%"></i></span></div>
+              <div><small>СКОРОСТЬ</small><strong id="stat-engine">18</strong><span class="stat-bar"><i style="width:64%"></i></span></div>
+              <div><small>УРОН</small><strong id="stat-weapon">16</strong><span class="stat-bar"><i style="width:58%"></i></span></div>
+            </div>
+            <button id="play-button" class="primary-button launch-button">ЗАПУСТИТЬ МИССИЮ <span>→</span></button>
+          </div>
+
+          <div id="upgrades-panel" class="menu-panel hidden">
+            <div class="panel-heading"><span>ИНЖЕНЕРНЫЙ ОТСЕК</span><h2>Модули корабля</h2><p>Каждое улучшение сохраняется в аккаунте.</p></div>
+            <div id="upgrade-list" class="upgrade-list"></div>
+          </div>
+
+          <div id="settings-panel" class="menu-panel hidden">
+            <div class="panel-heading"><span>КОНФИГУРАЦИЯ</span><h2>Настройки пилота</h2><p>Настройте цвет двигателя и громкость интерфейса.</p></div>
+            <form id="settings-form" class="settings-form">
+              <label>Цвет энергетического следа <input id="ship-color" type="color" value="#69e7ff"></label>
+              <label>Громкость интерфейса <span id="volume-value">70%</span><input id="volume" type="range" min="0" max="100" value="70"></label>
+              <button class="primary-button" type="submit">СОХРАНИТЬ</button>
+            </form>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="game-screen" class="screen game-screen hidden">
+      <div id="game-canvas"></div>
+      <div class="game-vignette"></div>
+      <header class="game-topbar">
+        <div class="compact-brand"><span class="brand-mark small"><i></i><i></i><i></i></span> SC // SECTOR 07</div>
+        <div id="connection-state" class="connection-pill"><i></i> ПОДКЛЮЧЕНИЕ</div>
+        <button id="leave-game" class="hud-button">ПОКИНУТЬ СЕКТОР</button>
+      </header>
+      <aside class="mission-card glass">
+        <span>ТЕКУЩАЯ ЗАДАЧА</span>
+        <strong>Патрулирование рубежа</strong>
+        <p>Избегайте астероидов и держитесь рядом с эскадрильей.</p>
+      </aside>
+      <div class="hud-bottom">
+        <div class="health-block glass"><small>ЦЕЛОСТНОСТЬ КОРПУСА</small><strong><span id="health-value">100</span>%</strong><div><i id="health-bar"></i></div></div>
+        <div class="crosshair"><i></i><i></i><span></span></div>
+        <div class="radar glass"><div id="radar-sweep"></div><span class="radar-player"></span></div>
+      </div>
+      <div class="controls-tip">WASD — движение · SHIFT — ускорение · ЛКМ / SPACE — огонь</div>
+      <div id="kill-feed" class="kill-feed"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
 
 </body>
 </html>

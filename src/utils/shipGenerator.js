@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { PartsShip } from './partsOfShip.js';
-import { SHIP_CONFIG } from '../config/ship.js'
+import {  SHIP_CONFIG  } from '../config/ship.js'
 
 // Класс создания корабля из частей
 export class ShipGenerator{ // нужно экспортировать для видимости
@@ -14,17 +14,18 @@ export class ShipGenerator{ // нужно экспортировать для в
     }
 
     createShip(type_ship){
-        const shipConfig = SHIP_CONFIG.type[type_ship];
+        const type_scout = SHIP_CONFIG.type.scout
+        const type_assault = SHIP_CONFIG.type.assault
         this.ship = new THREE.Group(); 
 
-        if(shipConfig){
-            this.ship.scale.setScalar(shipConfig.radius);
+        if(type_ship === type_scout){
+            this.ship.scale.set(type_scout.width, 1, type_scout.height);
+            console.log(this.ship)
         }
 
-        const cabin = this.parts.createCabin();
+        let cabin = this.parts.createCabin();
         this.ship.add(cabin);
         this.scene.add(this.ship);
-        return cabin;
     }
 
     init(){

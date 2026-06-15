@@ -14,18 +14,18 @@ export class LightManager {
     
     _createMainLight(){
         const config = LIGHTS_CONFIG.main
-        const light =
+        const light = 
             new THREE.DirectionalLight(config.color, config.intensity);
         light.position.set(config.position.x, config.position.y, config.position.z);
         
         if(config.castShadow){
             light.castShadow = true;
-            light.shadow.mapSize.width = config.shadowMapSize;
-            light.shadow.mapSize.height = config.shadowMapSize;
+            // light.shadow.MapSize.with = config.shadowMapSize;
+            // light.shadow.MapSize.height = config.shadowMapSize;
+            
             light.shadow.camera.near = 0.5;
             light.shadow.camera.far = 20;
         }
-
         this.scene.add(light);
         this.lights.main = light;
     }

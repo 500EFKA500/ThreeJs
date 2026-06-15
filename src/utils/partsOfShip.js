@@ -11,9 +11,7 @@ export class PartsShip {
     createCabin() {
         const maps = this.textureLoader.load('grass');
 
-        const geometry = new THREE.SphereGeometry(2, 96, 48);
-        geometry.setAttribute('uv2', new THREE.BufferAttribute(geometry.attributes.uv.array, 2));
-
+        const coneGeometry = new THREE.ConeGeometry(3, 4, 10);
         const material = new THREE.MeshStandardMaterial({
             map: maps.albedo,
             aoMap: maps.ao,
@@ -21,18 +19,10 @@ export class PartsShip {
             normalMap: maps.normal,
             roughnessMap: maps.roughness,
             metalnessMap: maps.metallic,
-            roughness: 1,
-            metalness: 1,
         });
 
-        material.aoMapIntensity = 1;
-        material.displacementScale = 0.35;
-        material.displacementBias = -0.12;
-        material.normalScale.set(1.2, 1.2);
-
-        this.cabin = new THREE.Mesh(geometry, material);
-        this.cabin.castShadow = true;
-        this.cabin.receiveShadow = true;
+        material.displacementScale = 0.1;
+        this.cabin = new THREE.Mesh(coneGeometry, material);
         return this.cabin;
     }
 }
