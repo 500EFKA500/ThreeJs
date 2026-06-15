@@ -125,6 +125,8 @@ input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(105,231,255,
 .settings-form label span { float: right; color: var(--cyan); }
 
 .game-screen { background: #02040a; }
+.game-screen.cursor-mode .crosshair { opacity: .2; }
+.game-screen.cursor-mode .hud-button { border-color: rgba(105,231,255,.55); color: var(--cyan); }
 #game-canvas, #game-canvas canvas { position:absolute; inset:0; width:100%; height:100%; }
 .game-vignette { pointer-events:none; position:absolute; inset:0; box-shadow:inset 0 0 180px rgba(0,0,0,.85); background:linear-gradient(180deg,rgba(0,0,0,.28),transparent 30%,transparent 65%,rgba(0,0,0,.45)); }
 .game-topbar { position:absolute; z-index:5; top:0; left:0; right:0; background:linear-gradient(180deg,rgba(2,5,13,.8),transparent); border:0; }
@@ -148,6 +150,8 @@ input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(105,231,255,
 .radar { width:145px; height:145px; border-radius:50%; position:relative; overflow:hidden; background:repeating-radial-gradient(circle,transparent 0 22px,rgba(105,231,255,.09) 23px 24px),rgba(3,15,25,.55); }
 #radar-sweep { position:absolute; inset:50% 0 0 50%; transform-origin:0 0; background:linear-gradient(25deg,rgba(105,231,255,.22),transparent 55%); animation:spin 3s linear infinite; }
 .radar-player { position:absolute; width:5px; height:5px; border-radius:50%; background:var(--cyan); top:50%; left:50%; box-shadow:0 0 10px var(--cyan); }
+.flight-mode { position:absolute; z-index:5; top:92px; left:50%; transform:translateX(-50%); padding:8px 13px; border:1px solid rgba(105,231,255,.16); background:rgba(3,10,20,.5); color:#8295aa; font-size:8px; letter-spacing:.16em; pointer-events:none; }
+.cursor-mode .flight-mode { color:var(--cyan); border-color:rgba(105,231,255,.4); }
 .controls-tip { position:absolute; z-index:4; bottom:10px; left:50%; transform:translateX(-50%); color:#607086; font-size:9px; letter-spacing:.12em; }
 .toast { position:fixed; z-index:50; left:50%; bottom:30px; transform:translate(-50%,20px); padding:12px 18px; border:1px solid var(--line); background:#0b1222; color:#cdebf4; font-size:12px; opacity:0; pointer-events:none; transition:.25s; }
 .toast.visible { opacity:1; transform:translate(-50%,0); }

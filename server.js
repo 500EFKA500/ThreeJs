@@ -243,17 +243,17 @@ const io = new Server(fastify.server, {
 });
 
 const players = new Map();
-const asteroids = Array.from({ length: 18 }, (_, index) => createAsteroid(index));
+const asteroids = Array.from({ length: 42 }, (_, index) => createAsteroid(index));
 
 function createAsteroid(id) {
   return {
     id,
-    x: (Math.random() - 0.5) * 110,
-    y: (Math.random() - 0.5) * 55,
-    z: -30 - Math.random() * 140,
+    x: (Math.random() - 0.5) * 320,
+    y: (Math.random() - 0.5) * 180,
+    z: (Math.random() - 0.5) * 360,
     size: 0.8 + Math.random() * 2.6,
-    speed: 3 + Math.random() * 5,
-    spin: (Math.random() - 0.5) * 1.4,
+    speed: 0.02 + Math.random() * 0.12,
+    spin: (Math.random() - 0.5) * 0.12,
   };
 }
 
@@ -292,9 +292,9 @@ io.on('connection', (socket) => {
       name: user.username,
       color: user.color,
       level: user.level,
-      x: (Math.random() - 0.5) * 16,
-      y: (Math.random() - 0.5) * 10,
-      z: 8,
+      x: (Math.random() - 0.5) * 12,
+      y: (Math.random() - 0.5) * 8,
+      z: (Math.random() - 0.5) * 12,
       yaw: 0,
       pitch: 0,
       hp: 100 + (user.hull_level - 1) * 20,
@@ -302,7 +302,7 @@ io.on('connection', (socket) => {
       speed: 16 + user.engine_level * 2,
       damage: 12 + user.weapon_level * 4,
       score: 0,
-      input: { x: 0, y: 0, boost: false },
+      input: { forward: 0, strafe: 0, vertical: 0 },
       lastShot: 0,
     };
     players.set(socket.id, player);
@@ -317,16 +317,20 @@ io.on('connection', (socket) => {
   socket.on('player:input', (input) => {
     const player = players.get(socket.id);
     if (!player) return;
-    player.input.x = Math.max(-1, Math.min(1, Number(input?.x) || 0));
-    player.input.y = Math.max(-1, Math.min(1, Number(input?.y) || 0));
-    player.input.boost = Boolean(input?.boost);
+    player.input.forward = Math.max(-1, Math.min(1, Number(input?.forward) || 0));
+    player.input.strafe = Math.max(-1, Math.min(1, Number(input?.strafe) || 0));
+    player.input.vertical = Math.max(-1, Math.min(1, Number(input?.vertical) || 0));
   });
 
   socket.on('player:aim', (aim) => {
     const player = players.get(socket.id);
     if (!player) return;
-    player.yaw = Math.max(-0.75, Math.min(0.75, Number(aim?.yaw) || 0));
-    player.pitch = Math.max(-0.5, Math.min(0.5, Number(aim?.pitch) || 0));
+    const yaw = Number(aim?.yaw);
+    const pitch = Number(aim?.pitch);
+    if (Number.isFinite(yaw)) player.yaw = yaw;
+    if (Number.isFinite(pitch)) {
+      player.pitch = Math.max(-Math.PI * 0.48, Math.min(Math.PI * 0.48, pitch));
+    }
   });
 
   socket.on('player:shoot', () => {
@@ -338,9 +342,14 @@ io.on('connection', (socket) => {
       playerId: player.id,
       x: player.x,
       y: player.y,
-      z: player.z - 2,
+      z: player.z,
       yaw: player.yaw,
       pitch: player.pitch,
+      direction: {
+        x: -Math.sin(player.yaw) * Math.cos(player.pitch),
+        y: Math.sin(player.pitch),
+        z: -Math.cos(player.yaw) * Math.cos(player.pitch),
+      },
       color: player.color,
     });
   });
@@ -355,14 +364,30 @@ setInterval(() => {
   const dt = 1 / TICK_RATE;
 
   for (const player of players.values()) {
-    const speed = player.speed * (player.input.boost ? 1.65 : 1);
-    player.x = Math.max(-42, Math.min(42, player.x + player.input.x * speed * dt));
-    player.y = Math.max(-23, Math.min(23, player.y + player.input.y * speed * dt));
+    const { forward, strafe, vertical } = player.input;
+    const length = Math.hypot(forward, strafe, vertical) || 1;
+    const normalizedForward = forward / Math.max(1, length);
+    const normalizedStrafe = strafe / Math.max(1, length);
+    const normalizedVertical = vertical / Math.max(1, length);
+    const cosPitch = Math.cos(player.pitch);
+    const forwardX = -Math.sin(player.yaw) * cosPitch;
+    const forwardY = Math.sin(player.pitch);
+    const forwardZ = -Math.cos(player.yaw) * cosPitch;
+    const rightX = Math.cos(player.yaw);
+    const rightZ = -Math.sin(player.yaw);
+
+    player.x += (forwardX * normalizedForward + rightX * normalizedStrafe) * player.speed * dt;
+    player.y += (forwardY * normalizedForward + normalizedVertical) * player.speed * dt;
+    player.z += (forwardZ * normalizedForward + rightZ * normalizedStrafe) * player.speed * dt;
+
+    player.x = Math.max(-500, Math.min(500, player.x));
+    player.y = Math.max(-500, Math.min(500, player.y));
+    player.z = Math.max(-500, Math.min(500, player.z));
   }
 
   for (const asteroid of asteroids) {
     asteroid.z += asteroid.speed * dt;
-    if (asteroid.z > 18) Object.assign(asteroid, createAsteroid(asteroid.id));
+    if (asteroid.z > 180) asteroid.z = -180;
 
     for (const player of players.values()) {
       const dx = player.x - asteroid.x;
@@ -375,6 +400,7 @@ setInterval(() => {
           player.hp = player.maxHp;
           player.x = 0;
           player.y = 0;
+          player.z = 0;
           player.score = Math.max(0, player.score - 100);
         }
       }

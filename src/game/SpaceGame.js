@@ -18,7 +18,14 @@ export class SpaceGame {
     this.shipTemplate = null;
     this.running = true;
     this.lastInputSent = 0;
-    this.mouse = { x: 0, y: 0 };
+    this.yaw = 0;
+    this.pitch = 0;
+    this.pointerLocked = false;
+    this.forward = new THREE.Vector3();
+    this.cameraTarget = new THREE.Vector3();
+    this.desiredCameraPosition = new THREE.Vector3();
+    this.rotationEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+    this.rotationQuaternion = new THREE.Quaternion();
     this.init();
   }
 
@@ -44,6 +51,7 @@ export class SpaceGame {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.1;
     this.container.replaceChildren(this.renderer.domElement);
+    this.renderer.domElement.requestPointerLock();
   }
 
   createWorld() {
@@ -62,7 +70,7 @@ export class SpaceGame {
       stars.push(
         (Math.random() - 0.5) * 500,
         (Math.random() - 0.5) * 260,
-        -Math.random() * 600,
+        (Math.random() - 0.5) * 600,
       );
     }
     const starGeometry = new THREE.BufferGeometry();
@@ -93,7 +101,7 @@ export class SpaceGame {
         const size = bounds.getSize(new THREE.Vector3());
         const scale = 3.8 / Math.max(size.x, size.y, size.z, 1);
         this.shipTemplate.scale.setScalar(scale);
-        this.shipTemplate.rotation.y = Math.PI;
+        this.shipTemplate.rotation.y = Math.PI / 2;
         this.shipTemplate.traverse((child) => {
           if (child.isMesh) {
             child.castShadow = true;
@@ -150,14 +158,6 @@ export class SpaceGame {
     const engine = new THREE.PointLight(player.color, 12, 18);
     engine.position.set(0, 0, 2.2);
     group.add(engine);
-
-    const glow = new THREE.Mesh(
-      new THREE.ConeGeometry(0.35, 2.5, 12, 1, true),
-      new THREE.MeshBasicMaterial({ color: player.color, transparent: true, opacity: 0.55, side: THREE.DoubleSide }),
-    );
-    glow.rotation.x = -Math.PI / 2;
-    glow.position.z = 2.7;
-    group.add(glow);
 
     group.userData.targetPosition = new THREE.Vector3(player.x, player.y, player.z);
     this.scene.add(group);
@@ -225,11 +225,15 @@ export class SpaceGame {
     );
     projectile.rotation.x = Math.PI / 2;
     projectile.position.set(shot.x, shot.y, shot.z);
-    projectile.userData.velocity = new THREE.Vector3(
-      Math.sin(shot.yaw) * 22,
-      -Math.sin(shot.pitch) * 18,
-      -90,
+    projectile.quaternion.setFromUnitVectors(
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(shot.direction.x, shot.direction.y, shot.direction.z).normalize(),
     );
+    projectile.userData.velocity = new THREE.Vector3(
+      shot.direction.x,
+      shot.direction.y,
+      shot.direction.z,
+    ).multiplyScalar(90);
     projectile.userData.life = 2;
     this.projectiles.push(projectile);
     this.scene.add(projectile);
@@ -237,19 +241,37 @@ export class SpaceGame {
 
   bindControls() {
     this.onKeyDown = (event) => {
+      if ((event.code === 'ShiftLeft' || event.code === 'ShiftRight') && !event.repeat) {
+        event.preventDefault();
+        this.togglePointerLock();
+        return;
+      }
       this.keys.add(event.code);
-      if (event.code === 'Space') {
+      if (event.code === 'Space' && this.pointerLocked) {
         event.preventDefault();
         this.socket?.emit('player:shoot');
       }
     };
     this.onKeyUp = (event) => this.keys.delete(event.code);
     this.onMouseMove = (event) => {
-      this.mouse.x = (event.clientX / innerWidth) * 2 - 1;
-      this.mouse.y = (event.clientY / innerHeight) * 2 - 1;
+      if (!this.pointerLocked) return;
+      this.yaw -= event.movementX * 0.0022;
+      this.pitch -= event.movementY * 0.0022;
+      this.pitch = THREE.MathUtils.clamp(this.pitch, -Math.PI * 0.48, Math.PI * 0.48);
     };
     this.onMouseDown = (event) => {
-      if (event.button === 0) this.socket?.emit('player:shoot');
+      if (event.button === 0 && this.pointerLocked) this.socket?.emit('player:shoot');
+    };
+    this.onPointerLockChange = () => {
+      this.pointerLocked = document.pointerLockElement === this.renderer.domElement;
+      document.querySelector('#game-screen').classList.toggle('cursor-mode', !this.pointerLocked);
+      document.querySelector('#flight-mode').textContent = this.pointerLocked
+        ? 'РЕЖИМ ПОЛЁТА · SHIFT — ОСВОБОДИТЬ КУРСОР'
+        : 'РЕЖИМ ИНТЕРФЕЙСА · SHIFT — ВЕРНУТЬСЯ К ПОЛЁТУ';
+      if (!this.pointerLocked) this.keys.clear();
+    };
+    this.onCanvasClick = () => {
+      if (!this.pointerLocked) this.renderer.domElement.requestPointerLock();
     };
     this.onResize = () => {
       this.camera.aspect = innerWidth / innerHeight;
@@ -261,19 +283,29 @@ export class SpaceGame {
     addEventListener('mousemove', this.onMouseMove);
     addEventListener('mousedown', this.onMouseDown);
     addEventListener('resize', this.onResize);
+    document.addEventListener('pointerlockchange', this.onPointerLockChange);
+    this.renderer.domElement.addEventListener('click', this.onCanvasClick);
+  }
+
+  togglePointerLock() {
+    if (this.pointerLocked) {
+      document.exitPointerLock();
+    } else {
+      this.renderer.domElement.requestPointerLock();
+    }
   }
 
   sendInput(time) {
     if (!this.socket?.connected || time - this.lastInputSent < 40) return;
     this.lastInputSent = time;
     this.socket.emit('player:input', {
-      x: Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA')),
-      y: Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS')),
-      boost: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
+      forward: Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS')),
+      strafe: Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA')),
+      vertical: Number(this.keys.has('KeyR')) - Number(this.keys.has('KeyF')),
     });
     this.socket.emit('player:aim', {
-      yaw: -this.mouse.x * 0.45,
-      pitch: this.mouse.y * 0.25,
+      yaw: this.yaw,
+      pitch: this.pitch,
     });
   }
 
@@ -283,16 +315,30 @@ export class SpaceGame {
     const delta = Math.min(this.clock.getDelta(), 0.05);
     this.sendInput(time);
 
-    this.starField.position.z += delta * 8;
-    if (this.starField.position.z > 200) this.starField.position.z = 0;
-
     for (const [id, object] of this.players) {
       object.position.lerp(object.userData.targetPosition, 1 - Math.exp(-12 * delta));
-      object.rotation.z = THREE.MathUtils.lerp(object.rotation.z, object.userData.targetYaw ?? 0, 0.08);
-      object.rotation.x = THREE.MathUtils.lerp(object.rotation.x, object.userData.targetPitch ?? 0, 0.08);
+      this.rotationEuler.set(
+        object.userData.targetPitch ?? 0,
+        object.userData.targetYaw ?? 0,
+        0,
+        'YXZ',
+      );
+      this.rotationQuaternion.setFromEuler(this.rotationEuler);
+      object.quaternion.slerp(this.rotationQuaternion, 1 - Math.exp(-10 * delta));
+
       if (id === this.selfId) {
-        this.camera.position.x = THREE.MathUtils.lerp(this.camera.position.x, object.position.x * 0.18, 0.04);
-        this.camera.position.y = THREE.MathUtils.lerp(this.camera.position.y, 7 + object.position.y * 0.12, 0.04);
+        this.forward.set(
+          -Math.sin(this.yaw) * Math.cos(this.pitch),
+          Math.sin(this.pitch),
+          -Math.cos(this.yaw) * Math.cos(this.pitch),
+        ).normalize();
+        this.desiredCameraPosition.copy(object.position)
+          .addScaledVector(this.forward, -11)
+          .addScaledVector(THREE.Object3D.DEFAULT_UP, 3.8);
+        this.camera.position.lerp(this.desiredCameraPosition, 1 - Math.exp(-8 * delta));
+        this.cameraTarget.copy(object.position).addScaledVector(this.forward, 14);
+        this.camera.lookAt(this.cameraTarget);
+        this.starField.position.copy(this.camera.position);
       }
     }
 
@@ -314,7 +360,6 @@ export class SpaceGame {
       }
     }
 
-    this.camera.lookAt(this.camera.position.x * 0.25, this.camera.position.y * 0.12, -28);
     this.renderer.render(this.scene, this.camera);
   };
 
@@ -327,6 +372,9 @@ export class SpaceGame {
     removeEventListener('mousemove', this.onMouseMove);
     removeEventListener('mousedown', this.onMouseDown);
     removeEventListener('resize', this.onResize);
+    document.removeEventListener('pointerlockchange', this.onPointerLockChange);
+    this.renderer?.domElement.removeEventListener('click', this.onCanvasClick);
+    if (document.pointerLockElement === this.renderer?.domElement) document.exitPointerLock();
     this.renderer?.dispose();
     this.container.replaceChildren();
   }
