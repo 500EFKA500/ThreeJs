@@ -1,0 +1,12 @@
+.git
+.gitignore
+.github
+.idea
+.vscode
+data
+dist
+node_modules
+npm-debug.log*
+.integration-data
+.integration-server.*.log
+README.md

@@ -1,5 +1,7 @@
 node_modules/
 dist/
 data/
+.env
+*.tar.gz
 .integration-data/
 .integration-server.*.log

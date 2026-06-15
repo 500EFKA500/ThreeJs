@@ -1,0 +1,29 @@
+services:
+  space-command:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: space-command
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 7000
+      DATA_DIR: /app/data
+    ports:
+      - "${APP_PORT:-7000}:7000"
+    volumes:
+      - space_command_data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:7000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  space_command_data:
+    name: space-command-data

@@ -71,6 +71,12 @@ await fastify.register(fastifyStatic, {
 
 fastify.get('/', (_, reply) => reply.sendFile('index.html', __dirname));
 fastify.get('/style.css', (_, reply) => reply.sendFile('style.css', __dirname));
+fastify.get('/api/health', async () => ({
+  status: 'ok',
+  uptime: Math.round(process.uptime()),
+  playersOnline: players.size,
+  timestamp: new Date().toISOString(),
+}));
 
 function parseCookies(header = '') {
   return Object.fromEntries(
