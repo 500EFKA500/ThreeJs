@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { SpaceGame } from './game/SpaceGame.js';
 
 class App {
@@ -5,7 +7,10 @@ class App {
     this.user = null;
     this.authMode = 'login';
     this.game = null;
+    this.hangarPreview = null;
     this.toastTimer = null;
+    this.respawnUntil = 0;
+    this.respawnTimer = null;
     this.bindEvents();
     this.restoreSession();
   }
@@ -19,6 +24,9 @@ class App {
     document.querySelector('#play-button').addEventListener('click', () => this.startGame());
     document.querySelector('#leave-game').addEventListener('click', () => this.leaveGame());
     document.querySelector('#settings-form').addEventListener('submit', (event) => this.saveSettings(event));
+    document.querySelector('#ship-color').addEventListener('input', (event) => {
+      this.applyThemeColor(event.target.value);
+    });
     document.querySelector('#volume').addEventListener('input', (event) => {
       document.querySelector('#volume-value').textContent = `${event.target.value}%`;
     });
@@ -91,7 +99,7 @@ class App {
 
   renderMenu() {
     const { upgrades, settings } = this.user;
-    document.documentElement.style.setProperty('--cyan', settings.color);
+    this.applyThemeColor(settings.color);
     document.querySelector('#pilot-name').textContent = this.user.username;
     document.querySelector('#pilot-level').textContent = this.user.level;
     document.querySelector('#pilot-credits').textContent = this.user.credits.toLocaleString('ru-RU');
@@ -102,7 +110,16 @@ class App {
     document.querySelector('#stat-engine').textContent = 16 + upgrades.engine * 2;
     document.querySelector('#stat-weapon').textContent = 12 + upgrades.weapon * 4;
     this.renderUpgrades();
+    this.updatePlayButton();
     this.showScreen('menu');
+    this.initHangarPreview();
+  }
+
+  initHangarPreview() {
+    if (this.hangarPreview) return;
+    const container = document.querySelector('#hangar-ship-preview-canvas');
+    if (!container) return;
+    this.hangarPreview = new HangarShipPreview(container);
   }
 
   renderUpgrades() {
@@ -163,6 +180,11 @@ class App {
     }
   }
 
+  applyThemeColor(color) {
+    document.documentElement.style.setProperty('--cyan', color);
+    document.documentElement.style.setProperty('--cyan-strong', color);
+  }
+
   showPanel(name) {
     document.querySelectorAll('.menu-panel').forEach((panel) => panel.classList.add('hidden'));
     document.querySelector(`#${name}-panel`).classList.remove('hidden');
@@ -172,6 +194,12 @@ class App {
   }
 
   startGame() {
+    const cooldownMs = this.getRespawnCooldownMs();
+    if (cooldownMs > 0) {
+      this.showToast(`Повторный запуск через ${Math.ceil(cooldownMs / 1000)} сек.`);
+      this.updatePlayButton();
+      return;
+    }
     this.showScreen('game');
     this.game = new SpaceGame({
       container: document.querySelector('#game-canvas'),
@@ -186,6 +214,8 @@ class App {
           ? '<i></i> СЕКТОР СИНХРОНИЗИРОВАН'
           : '<i></i> ПОДКЛЮЧЕНИЕ';
       },
+      onDeath: (event) => this.handleDeath(event),
+      onSpawnCooldown: (event) => this.handleSpawnCooldown(event),
     });
   }
 
@@ -193,6 +223,55 @@ class App {
     this.game?.destroy();
     this.game = null;
     this.renderMenu();
+  }
+
+  handleDeath(event) {
+    this.game?.destroy();
+    this.game = null;
+    this.respawnUntil = event.respawnAt || Date.now() + (event.cooldownMs ?? 20000);
+    this.renderMenu();
+    this.startRespawnTimer();
+    this.showToast(`${event.message || 'Корабль уничтожен'}. Возвращение через 20 сек.`);
+  }
+
+  handleSpawnCooldown(event) {
+    this.game?.destroy();
+    this.game = null;
+    this.respawnUntil = event.respawnAt || Date.now() + (event.cooldownMs ?? 20000);
+    this.renderMenu();
+    this.startRespawnTimer();
+    this.showToast(`Корабль готовится к запуску: ${Math.ceil(this.getRespawnCooldownMs() / 1000)} сек.`);
+  }
+
+  getRespawnCooldownMs() {
+    return Math.max(0, this.respawnUntil - Date.now());
+  }
+
+  startRespawnTimer() {
+    clearInterval(this.respawnTimer);
+    this.updatePlayButton();
+    this.respawnTimer = setInterval(() => {
+      this.updatePlayButton();
+      if (this.getRespawnCooldownMs() <= 0) {
+        clearInterval(this.respawnTimer);
+        this.respawnTimer = null;
+        this.showToast('Корабль снова готов к запуску');
+      }
+    }, 250);
+  }
+
+  updatePlayButton() {
+    const button = document.querySelector('#play-button');
+    const cooldownMs = this.getRespawnCooldownMs();
+    if (cooldownMs > 0) {
+      button.disabled = true;
+      button.classList.add('is-cooling-down');
+      button.innerHTML = `РЕСПАВН ЧЕРЕЗ ${Math.ceil(cooldownMs / 1000)} СЕК <span>⌛</span>`;
+      return;
+    }
+    button.disabled = false;
+    button.classList.remove('is-cooling-down');
+    button.innerHTML = 'ЗАПУСТИТЬ МИССИЮ <span>→</span>';
   }
 
   async logout() {
@@ -215,6 +294,78 @@ class App {
     clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(() => toast.classList.remove('visible'), 2600);
   }
+}
+
+class HangarShipPreview {
+  constructor(container) {
+    this.container = container;
+    this.scene = new THREE.Scene();
+    this.clock = new THREE.Clock();
+    this.model = null;
+    this.frame = null;
+    this.init();
+  }
+
+  init() {
+    this.camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
+    this.camera.position.set(0, 1.4, 9);
+    this.camera.lookAt(0, 0, 0);
+
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.25;
+    this.container.replaceChildren(this.renderer.domElement);
+
+    this.scene.add(new THREE.HemisphereLight(0x8fdcff, 0x050712, 1.5));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.6);
+    keyLight.position.set(5, 7, 6);
+    this.scene.add(keyLight);
+    const rimLight = new THREE.PointLight(0x69e7ff, 28, 18);
+    rimLight.position.set(-4, 2, 3);
+    this.scene.add(rimLight);
+
+    new GLTFLoader().load('/models/scout.glb', (gltf) => {
+      this.model = gltf.scene;
+      const bounds = new THREE.Box3().setFromObject(this.model);
+      const size = bounds.getSize(new THREE.Vector3());
+      const scale = 4.6 / Math.max(size.x, size.y, size.z, 1);
+      this.model.scale.setScalar(scale);
+      this.model.rotation.set(0.18, Math.PI / 2, -0.1);
+      this.model.traverse((child) => {
+        if (child.isMesh) {
+          child.material = child.material.clone();
+          child.material.metalness = Math.max(child.material.metalness ?? 0, 0.35);
+          child.material.roughness = Math.min(child.material.roughness ?? 1, 0.68);
+        }
+      });
+      this.scene.add(this.model);
+    });
+
+    this.resize();
+    addEventListener('resize', () => this.resize());
+    this.animate();
+  }
+
+  resize() {
+    const width = Math.max(1, this.container.clientWidth);
+    const height = Math.max(1, this.container.clientHeight);
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(width, height, false);
+  }
+
+  animate = () => {
+    this.frame = requestAnimationFrame(this.animate);
+    const elapsed = this.clock.getElapsedTime();
+    if (this.model) {
+      this.model.rotation.y = Math.PI / 2 + Math.sin(elapsed * 0.8) * 0.24;
+      this.model.rotation.z = -0.1 + Math.sin(elapsed * 0.55) * 0.06;
+      this.model.position.y = Math.sin(elapsed * 1.2) * 0.12;
+    }
+    this.renderer.render(this.scene, this.camera);
+  };
 }
 
 new App();

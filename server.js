@@ -249,7 +249,20 @@ const io = new Server(fastify.server, {
 });
 
 const players = new Map();
+const respawnCooldowns = new Map();
 const asteroids = Array.from({ length: 42 }, (_, index) => createAsteroid(index));
+const projectiles = new Map();
+let projectileId = 0;
+
+const PROJECTILE_SPEED = 190;
+const PROJECTILE_LIFETIME = 1.8;
+const SHIP_HIT_RADIUS = 3.2;
+const SHIP_COLLISION_RADIUS = 4.2;
+const SHIP_COLLISION_KNOCKBACK = 18;
+const RESPAWN_COOLDOWN_MS = 20000;
+const ASTEROID_DAMAGE = 18;
+const ASTEROID_KNOCKBACK = 30;
+const ASTEROID_HIT_COOLDOWN_MS = 850;
 
 function createAsteroid(id) {
   return {
@@ -274,9 +287,30 @@ function publicPlayer(player) {
     yaw: player.yaw,
     pitch: player.pitch,
     hp: player.hp,
+    maxHp: player.maxHp,
     level: player.level,
     score: player.score,
   };
+}
+
+function getAimDirection(player) {
+  return {
+    x: -Math.sin(player.yaw) * Math.cos(player.pitch),
+    y: Math.sin(player.pitch),
+    z: -Math.cos(player.yaw) * Math.cos(player.pitch),
+  };
+}
+
+function killPlayer(player, payload = {}) {
+  const respawnAt = Date.now() + RESPAWN_COOLDOWN_MS;
+  respawnCooldowns.set(player.userId, respawnAt);
+  players.delete(player.id);
+  io.to(player.id).emit('game:death', {
+    cooldownMs: RESPAWN_COOLDOWN_MS,
+    respawnAt,
+    ...payload,
+  });
+  io.emit('player:left', player.id);
 }
 
 io.use((socket, next) => {
@@ -292,6 +326,13 @@ io.on('connection', (socket) => {
 
   socket.on('game:join', () => {
     if (players.has(socket.id)) return;
+    const respawnAt = respawnCooldowns.get(user.id) ?? 0;
+    const cooldownMs = Math.max(0, respawnAt - Date.now());
+    if (cooldownMs > 0) {
+      socket.emit('game:spawn-cooldown', { cooldownMs, respawnAt });
+      return;
+    }
+    respawnCooldowns.delete(user.id);
     const player = {
       id: socket.id,
       userId: user.id,
@@ -305,10 +346,14 @@ io.on('connection', (socket) => {
       pitch: 0,
       hp: 100 + (user.hull_level - 1) * 20,
       maxHp: 100 + (user.hull_level - 1) * 20,
-      speed: 16 + user.engine_level * 2,
+      speed: (16 + user.engine_level * 2) / 1.5,
       damage: 12 + user.weapon_level * 4,
       score: 0,
       input: { forward: 0, strafe: 0, vertical: 0 },
+      vx: 0,
+      vy: 0,
+      vz: 0,
+      lastAsteroidHit: 0,
       lastShot: 0,
     };
     players.set(socket.id, player);
@@ -344,19 +389,33 @@ io.on('connection', (socket) => {
     const now = Date.now();
     if (!player || now - player.lastShot < 280) return;
     player.lastShot = now;
+    const direction = getAimDirection(player);
+    const shot = {
+      id: ++projectileId,
+      ownerId: player.id,
+      ownerName: player.name,
+      damage: player.damage,
+      x: player.x + direction.x * 2.8,
+      y: player.y + direction.y * 2.8,
+      z: player.z + direction.z * 2.8,
+      vx: direction.x * PROJECTILE_SPEED,
+      vy: direction.y * PROJECTILE_SPEED,
+      vz: direction.z * PROJECTILE_SPEED,
+      life: PROJECTILE_LIFETIME,
+      color: player.color,
+      direction,
+    };
+    projectiles.set(shot.id, shot);
     io.emit('weapon:fired', {
-      playerId: player.id,
-      x: player.x,
-      y: player.y,
-      z: player.z,
+      id: shot.id,
+      playerId: shot.ownerId,
+      x: shot.x,
+      y: shot.y,
+      z: shot.z,
       yaw: player.yaw,
       pitch: player.pitch,
-      direction: {
-        x: -Math.sin(player.yaw) * Math.cos(player.pitch),
-        y: Math.sin(player.pitch),
-        z: -Math.cos(player.yaw) * Math.cos(player.pitch),
-      },
-      color: player.color,
+      direction: shot.direction,
+      color: shot.color,
     });
   });
 
@@ -382,9 +441,14 @@ setInterval(() => {
     const rightX = Math.cos(player.yaw);
     const rightZ = -Math.sin(player.yaw);
 
-    player.x += (forwardX * normalizedForward + rightX * normalizedStrafe) * player.speed * dt;
-    player.y += (forwardY * normalizedForward + normalizedVertical) * player.speed * dt;
-    player.z += (forwardZ * normalizedForward + rightZ * normalizedStrafe) * player.speed * dt;
+    player.x += (forwardX * normalizedForward + rightX * normalizedStrafe) * player.speed * dt + player.vx * dt;
+    player.y += (forwardY * normalizedForward + normalizedVertical) * player.speed * dt + player.vy * dt;
+    player.z += (forwardZ * normalizedForward + rightZ * normalizedStrafe) * player.speed * dt + player.vz * dt;
+
+    const friction = Math.exp(-3.8 * dt);
+    player.vx *= friction;
+    player.vy *= friction;
+    player.vz *= friction;
 
     player.x = Math.max(-500, Math.min(500, player.x));
     player.y = Math.max(-500, Math.min(500, player.y));
@@ -399,17 +463,130 @@ setInterval(() => {
       const dx = player.x - asteroid.x;
       const dy = player.y - asteroid.y;
       const dz = player.z - asteroid.z;
-      if (dx * dx + dy * dy + dz * dz < (asteroid.size + 1.2) ** 2) {
-        player.hp = Math.max(0, player.hp - 18);
-        Object.assign(asteroid, createAsteroid(asteroid.id));
-        if (player.hp === 0) {
-          player.hp = player.maxHp;
-          player.x = 0;
-          player.y = 0;
-          player.z = 0;
-          player.score = Math.max(0, player.score - 100);
-        }
+      const hitDistance = asteroid.size + 1.6;
+      const distanceSquared = dx * dx + dy * dy + dz * dz;
+      if (distanceSquared >= hitDistance * hitDistance) continue;
+
+      const distance = Math.sqrt(distanceSquared) || 0.001;
+      const nx = dx / distance;
+      const ny = dy / distance;
+      const nz = dz / distance;
+      const pushOut = hitDistance - distance;
+      player.x += nx * pushOut;
+      player.y += ny * pushOut;
+      player.z += nz * pushOut;
+      player.vx += nx * ASTEROID_KNOCKBACK;
+      player.vy += ny * ASTEROID_KNOCKBACK;
+      player.vz += nz * ASTEROID_KNOCKBACK;
+
+      const now = Date.now();
+      if (now - player.lastAsteroidHit < ASTEROID_HIT_COOLDOWN_MS) continue;
+      player.lastAsteroidHit = now;
+      player.hp = Math.max(0, player.hp - ASTEROID_DAMAGE);
+      io.emit('combat:asteroid-hit', {
+        targetId: player.id,
+        targetName: player.name,
+        asteroidId: asteroid.id,
+        damage: ASTEROID_DAMAGE,
+        hp: player.hp,
+        maxHp: player.maxHp,
+      });
+
+      if (player.hp === 0) {
+        player.score = Math.max(0, player.score - 100);
+        killPlayer(player, {
+          reason: 'asteroid',
+          message: 'Корабль разрушен при столкновении с астероидом',
+        });
+        break;
       }
+    }
+  }
+
+  const playerList = [...players.values()];
+  for (let i = 0; i < playerList.length; i++) {
+    for (let j = i + 1; j < playerList.length; j++) {
+      const first = playerList[i];
+      const second = playerList[j];
+      const dx = first.x - second.x;
+      const dy = first.y - second.y;
+      const dz = first.z - second.z;
+      const distanceSquared = dx * dx + dy * dy + dz * dz;
+      if (distanceSquared >= SHIP_COLLISION_RADIUS * SHIP_COLLISION_RADIUS) continue;
+
+      const distance = Math.sqrt(distanceSquared) || 0.001;
+      const nx = dx / distance;
+      const ny = dy / distance;
+      const nz = dz / distance;
+      const pushOut = (SHIP_COLLISION_RADIUS - distance) * 0.5;
+
+      first.x += nx * pushOut;
+      first.y += ny * pushOut;
+      first.z += nz * pushOut;
+      second.x -= nx * pushOut;
+      second.y -= ny * pushOut;
+      second.z -= nz * pushOut;
+
+      first.vx += nx * SHIP_COLLISION_KNOCKBACK;
+      first.vy += ny * SHIP_COLLISION_KNOCKBACK;
+      first.vz += nz * SHIP_COLLISION_KNOCKBACK;
+      second.vx -= nx * SHIP_COLLISION_KNOCKBACK;
+      second.vy -= ny * SHIP_COLLISION_KNOCKBACK;
+      second.vz -= nz * SHIP_COLLISION_KNOCKBACK;
+    }
+  }
+
+  for (const projectile of projectiles.values()) {
+    projectile.life -= dt;
+    projectile.x += projectile.vx * dt;
+    projectile.y += projectile.vy * dt;
+    projectile.z += projectile.vz * dt;
+
+    if (projectile.life <= 0) {
+      projectiles.delete(projectile.id);
+      continue;
+    }
+
+    for (const target of players.values()) {
+      if (target.id === projectile.ownerId || target.hp <= 0) continue;
+      const dx = target.x - projectile.x;
+      const dy = target.y - projectile.y;
+      const dz = target.z - projectile.z;
+
+      if (dx * dx + dy * dy + dz * dz > SHIP_HIT_RADIUS * SHIP_HIT_RADIUS) continue;
+
+      target.hp = Math.max(0, target.hp - projectile.damage);
+      const attacker = players.get(projectile.ownerId);
+      if (attacker) attacker.score += target.hp === 0 ? 100 : 20;
+
+      io.emit('combat:hit', {
+        projectileId: projectile.id,
+        attackerId: projectile.ownerId,
+        attackerName: projectile.ownerName,
+        targetId: target.id,
+        targetName: target.name,
+        damage: projectile.damage,
+        hp: target.hp,
+        maxHp: target.maxHp,
+      });
+
+      projectiles.delete(projectile.id);
+
+      if (target.hp === 0) {
+        io.emit('combat:destroyed', {
+          attackerId: projectile.ownerId,
+          attackerName: projectile.ownerName,
+          targetId: target.id,
+          targetName: target.name,
+        });
+        killPlayer(target, {
+          reason: 'combat',
+          attackerId: projectile.ownerId,
+          attackerName: projectile.ownerName,
+          message: `${projectile.ownerName} уничтожил ваш корабль`,
+        });
+      }
+      break;
     }
   }
 

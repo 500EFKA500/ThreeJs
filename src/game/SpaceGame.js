@@ -2,17 +2,23 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { io } from 'socket.io-client';
 
+const PROJECTILE_RENDER_SPEED = 190;
+
 export class SpaceGame {
-  constructor({ container, user, onHealth, onConnection }) {
+  constructor({ container, user, onHealth, onConnection, onDeath, onSpawnCooldown }) {
     this.container = container;
     this.user = user;
     this.onHealth = onHealth;
     this.onConnection = onConnection;
+    this.onDeath = onDeath;
+    this.onSpawnCooldown = onSpawnCooldown;
     this.scene = new THREE.Scene();
     this.clock = new THREE.Clock();
     this.players = new Map();
     this.asteroids = new Map();
     this.projectiles = [];
+    this.latestPlayers = [];
+    this.latestAsteroids = [];
     this.keys = new Set();
     this.selfId = null;
     this.shipTemplate = null;
@@ -26,6 +32,9 @@ export class SpaceGame {
     this.desiredCameraPosition = new THREE.Vector3();
     this.rotationEuler = new THREE.Euler(0, 0, 0, 'YXZ');
     this.rotationQuaternion = new THREE.Quaternion();
+    this.screenPosition = new THREE.Vector3();
+    this.radarElement = document.querySelector('.radar');
+    this.radarLayer = null;
     this.init();
   }
 
@@ -51,7 +60,20 @@ export class SpaceGame {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.1;
     this.container.replaceChildren(this.renderer.domElement);
+    this.createOverlay();
     this.renderer.domElement.requestPointerLock();
+  }
+
+  createOverlay() {
+    this.overlay = document.createElement('div');
+    this.overlay.className = 'ship-label-layer';
+    document.querySelector('#game-screen').append(this.overlay);
+
+    if (this.radarElement) {
+      this.radarLayer = document.createElement('div');
+      this.radarLayer.className = 'radar-layer';
+      this.radarElement.append(this.radarLayer);
+    }
   }
 
   createWorld() {
@@ -138,16 +160,25 @@ export class SpaceGame {
     this.socket.on('disconnect', () => this.onConnection(false));
     this.socket.on('game:init', (state) => {
       this.selfId = state.selfId;
+      this.latestPlayers = state.players;
+      this.latestAsteroids = state.asteroids;
       state.players.forEach((player) => this.upsertPlayer(player, true));
       state.asteroids.forEach((asteroid) => this.upsertAsteroid(asteroid, true));
     });
+    this.socket.on('game:spawn-cooldown', (event) => this.onSpawnCooldown?.(event));
+    this.socket.on('game:death', (event) => this.onDeath?.(event));
     this.socket.on('player:joined', (player) => this.upsertPlayer(player, true));
     this.socket.on('player:left', (id) => this.removePlayer(id));
     this.socket.on('game:snapshot', (state) => {
+      this.latestPlayers = state.players;
+      this.latestAsteroids = state.asteroids;
       state.players.forEach((player) => this.upsertPlayer(player));
       state.asteroids.forEach((asteroid) => this.upsertAsteroid(asteroid));
     });
     this.socket.on('weapon:fired', (shot) => this.spawnProjectile(shot));
+    this.socket.on('combat:hit', (hit) => this.onHit(hit));
+    this.socket.on('combat:asteroid-hit', (hit) => this.onAsteroidHit(hit));
+    this.socket.on('combat:destroyed', (event) => this.addFeed(`${event.attackerName} уничтожил ${event.targetName}`));
   }
 
   createPlayerObject(player) {
@@ -160,8 +191,22 @@ export class SpaceGame {
     group.add(engine);
 
     group.userData.targetPosition = new THREE.Vector3(player.x, player.y, player.z);
+    group.userData.engine = engine;
+    group.userData.label = this.createShipLabel(player);
     this.scene.add(group);
     return group;
+  }
+
+  createShipLabel(player) {
+    const label = document.createElement('div');
+    label.className = 'ship-label';
+    label.innerHTML = `
+      <strong></strong>
+      <span class="ship-label-hp"><i></i></span>
+    `;
+    label.querySelector('strong').textContent = player.name;
+    this.overlay.append(label);
+    return label;
   }
 
   upsertPlayer(player, immediate = false) {
@@ -173,16 +218,31 @@ export class SpaceGame {
     object.userData.targetPosition.set(player.x, player.y, player.z);
     object.userData.targetYaw = player.yaw;
     object.userData.targetPitch = player.pitch;
+    object.userData.player = player;
+    object.userData.maxHp = player.maxHp || 100;
+    if (object.userData.engine) object.userData.engine.color.set(player.color);
+    this.updateShipLabel(object, player);
     if (immediate) object.position.copy(object.userData.targetPosition);
     if (player.id === this.selfId) {
-      const maxHp = 100 + (this.user.upgrades.hull - 1) * 20;
-      this.onHealth(player.hp, maxHp);
+      this.onHealth(player.hp, player.maxHp || 100);
     }
+  }
+
+  updateShipLabel(object, player) {
+    const label = object.userData.label;
+    if (!label) return;
+    const percent = Math.max(0, Math.min(100, (player.hp / (player.maxHp || 100)) * 100));
+    label.querySelector('strong').textContent = player.name;
+    label.querySelector('i').style.width = `${percent}%`;
+    label.classList.toggle('is-self', player.id === this.selfId);
   }
 
   removePlayer(id) {
     const object = this.players.get(id);
-    if (object) this.scene.remove(object);
+    if (object) {
+      object.userData.label?.remove();
+      this.scene.remove(object);
+    }
     this.players.delete(id);
   }
 
@@ -225,6 +285,7 @@ export class SpaceGame {
     );
     projectile.rotation.x = Math.PI / 2;
     projectile.position.set(shot.x, shot.y, shot.z);
+    projectile.userData.serverId = shot.id;
     projectile.quaternion.setFromUnitVectors(
       new THREE.Vector3(0, 1, 0),
       new THREE.Vector3(shot.direction.x, shot.direction.y, shot.direction.z).normalize(),
@@ -233,10 +294,37 @@ export class SpaceGame {
       shot.direction.x,
       shot.direction.y,
       shot.direction.z,
-    ).multiplyScalar(90);
+    ).multiplyScalar(PROJECTILE_RENDER_SPEED);
     projectile.userData.life = 2;
     this.projectiles.push(projectile);
     this.scene.add(projectile);
+  }
+
+  onHit(hit) {
+    for (let index = this.projectiles.length - 1; index >= 0; index--) {
+      const projectile = this.projectiles[index];
+      if (projectile.userData.serverId !== hit.projectileId) continue;
+      this.scene.remove(projectile);
+      projectile.geometry.dispose();
+      projectile.material.dispose();
+      this.projectiles.splice(index, 1);
+      break;
+    }
+    this.addFeed(`${hit.attackerName} попал в ${hit.targetName}: -${hit.damage}`);
+  }
+
+  onAsteroidHit(hit) {
+    this.addFeed(`${hit.targetName} столкнулся с астероидом: -${hit.damage}`);
+  }
+
+  addFeed(message) {
+    const feed = document.querySelector('#kill-feed');
+    if (!feed) return;
+    const item = document.createElement('div');
+    item.textContent = message;
+    feed.prepend(item);
+    setTimeout(() => item.remove(), 3500);
+    while (feed.children.length > 4) feed.lastElementChild.remove();
   }
 
   bindControls() {
@@ -342,6 +430,9 @@ export class SpaceGame {
       }
     }
 
+    this.updateShipLabels();
+    this.updateRadar();
+
     for (const object of this.asteroids.values()) {
       object.position.lerp(object.userData.targetPosition, 1 - Math.exp(-9 * delta));
       object.rotation.x += object.userData.spin * delta;
@@ -363,6 +454,59 @@ export class SpaceGame {
     this.renderer.render(this.scene, this.camera);
   };
 
+  updateShipLabels() {
+    for (const [id, object] of this.players) {
+      const label = object.userData.label;
+      if (!label) continue;
+      if (id === this.selfId) {
+        label.style.opacity = '0';
+        continue;
+      }
+
+      this.screenPosition.copy(object.position).add(new THREE.Vector3(0, 3.4, 0));
+      this.screenPosition.project(this.camera);
+      const visible = this.screenPosition.z < 1;
+      const x = (this.screenPosition.x * 0.5 + 0.5) * innerWidth;
+      const y = (-this.screenPosition.y * 0.5 + 0.5) * innerHeight;
+
+      label.style.opacity = visible ? '1' : '0';
+      label.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -100%)`;
+    }
+  }
+
+  updateRadar() {
+    if (!this.radarLayer || !this.selfId) return;
+    const self = this.latestPlayers.find((player) => player.id === this.selfId);
+    if (!self) return;
+
+    this.radarLayer.replaceChildren();
+    const range = 170;
+    const radius = 68;
+
+    for (const player of this.latestPlayers) {
+      if (player.id === this.selfId) continue;
+      this.addRadarBlip(player.x - self.x, player.z - self.z, radius, range, 'player', player.color);
+    }
+
+    for (const asteroid of this.latestAsteroids.slice(0, 28)) {
+      this.addRadarBlip(asteroid.x - self.x, asteroid.z - self.z, radius, range, 'asteroid');
+    }
+  }
+
+  addRadarBlip(dx, dz, radius, range, type, color = '#69e7ff') {
+    const distance = Math.hypot(dx, dz);
+    if (distance > range) return;
+    const blip = document.createElement('span');
+    blip.className = `radar-blip ${type}`;
+    blip.style.left = `${50 + (dx / range) * 47}%`;
+    blip.style.top = `${50 + (dz / range) * 47}%`;
+    if (type === 'player') {
+      blip.style.background = color;
+      blip.style.boxShadow = `0 0 8px ${color}`;
+    }
+    this.radarLayer.append(blip);
+  }
+
   destroy() {
     this.running = false;
     cancelAnimationFrame(this.frame);
@@ -375,6 +519,8 @@ export class SpaceGame {
     document.removeEventListener('pointerlockchange', this.onPointerLockChange);
     this.renderer?.domElement.removeEventListener('click', this.onCanvasClick);
     if (document.pointerLockElement === this.renderer?.domElement) document.exitPointerLock();
+    this.overlay?.remove();
+    this.radarLayer?.remove();
     this.renderer?.dispose();
     this.container.replaceChildren();
   }
