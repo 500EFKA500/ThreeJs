@@ -1,3 +1,4 @@
+
 FROM node:22-bookworm-slim
 
 ENV NODE_ENV=production
