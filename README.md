@@ -1,107 +1,129 @@
 <div align="center">
 
-# SPACE COMMAND
+# SPACE COMMAND: SKILLS+
 
-### Multiplayer space flight built with Three.js, Fastify, Socket.IO and SQLite
+### Многопользовательский космический экшен с прокачкой, способностями и серверной симуляцией
 
-[![Three.js](https://img.shields.io/badge/Three.js-0.184-black?logo=threedotjs)](https://threejs.org/)
-[![Fastify](https://img.shields.io/badge/Fastify-5-black?logo=fastify)](https://fastify.dev/)
-[![Socket.IO](https://img.shields.io/badge/Socket.IO-4-black?logo=socketdotio)](https://socket.io/)
-[![Node.js](https://img.shields.io/badge/Node.js-22-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Branch](https://img.shields.io/badge/branch-Skills%2B-69e7ff?style=for-the-badge)](https://github.com/500EFKA500/ThreeJs/tree/Skills%2B)
+[![Three.js](https://img.shields.io/badge/Three.js-0.184-black?style=for-the-badge&logo=threedotjs)](https://threejs.org/)
+[![Fastify](https://img.shields.io/badge/Fastify-5-black?style=for-the-badge&logo=fastify)](https://fastify.dev/)
+[![Socket.IO](https://img.shields.io/badge/Socket.IO-4-010101?style=for-the-badge&logo=socketdotio)](https://socket.io/)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ed?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 
-Авторизуйтесь, улучшайте корабль и исследуйте общий космический сектор вместе с другими пилотами.
+Создайте аккаунт, выберите корабль и войдите в общий космический сектор. Сражайтесь с другими пилотами, уничтожайте астероиды, получайте опыт и открывайте новые способности.
+
+**[Запустить онлайн-версию](http://193.233.75.120:7000)**
 
 </div>
 
 ---
 
-## Возможности
+## Что появилось в Skills+
 
-- Регистрация и вход с хешированием паролей через `scrypt`.
-- HttpOnly-сессии, привязанные к аккаунту.
-- Постоянное хранение аккаунтов, кредитов, настроек и улучшений в SQLite.
-- Главное меню, ангар, прокачка корабля и настройки пилота.
-- Свободный полёт в трёхмерном пространстве.
-- Модель корабля GLB, звёздное поле, астероиды и плазменные снаряды.
-- Синхронизация игроков и игрового мира через Socket.IO.
-- Серверная обработка движения, столкновений и состояния кораблей.
-- Адаптивный космический интерфейс.
-- Готовая Docker-конфигурация с постоянным томом базы данных.
+Ветка `Skills+` добавляет полноценную систему развития пилота и расширяет боевую часть проекта.
+
+| Уровень | Способность | Эффект | Перезарядка |
+|---:|---|---|---:|
+| `5` | **Энергетический щит** | Защищает корабль от снарядов и урона астероидов в течение 6 секунд | 25 сек. |
+| `10` | **Шквал** | Выпускает сверхскоростную очередь из 40 плазменных снарядов | 40 сек. |
+| `15` | **Сингулярный луч** | Создаёт огромный луч, уничтожающий всё на линии атаки | 120 сек. |
+
+Во время активации сингулярного луча изображение становится чёрно-белым, а сам луч виден всем игрокам в секторе.
+
+## Игровые возможности
+
+- Авторизация и регистрация с хешированием паролей через `scrypt`.
+- Аккаунты, настройки, улучшения, уровень и опыт сохраняются в SQLite.
+- Свободный полёт в трёхмерном пространстве с управлением камерой мышью.
+- Синхронизация игроков, выстрелов, урона, чата и способностей через Socket.IO.
+- Серверная обработка движения, попаданий, столкновений и перезарядки навыков.
+- Столкновения с кораблями и астероидами с отталкиванием и уроном.
+- Полоски здоровья и позывные над кораблями других игроков.
+- Радар, боевой прицел, hit-marker, журнал событий и чат эскадрильи.
+- Настраиваемый цвет корабля и всего игрового интерфейса.
+- Респавн игрока через 20 секунд после уничтожения.
+
+### Астероиды и опыт
+
+Астероид выдерживает **три попадания**. После уничтожения игрок получает **35 EXP**, а новый астероид появляется через **8 секунд**. Требование для следующего уровня рассчитывается по формуле:
+
+```text
+EXP для следующего уровня = текущий уровень × 100
+```
+
+Проверка попадания выполняется по всему отрезку движения снаряда между серверными тиками, поэтому быстрые пули не пролетают сквозь небольшие цели.
 
 ## Управление
 
 | Клавиша | Действие |
 |---|---|
-| `W` / `S` | Полёт вперёд / назад |
-| `A` / `D` | Смещение влево / вправо |
+| `W` / `S` | Движение вперёд / назад |
+| `A` / `D` | Движение влево / вправо |
 | `R` / `F` | Подъём / снижение |
-| Мышь | Управление направлением полёта и камерой |
-| `ЛКМ` или `Space` | Огонь |
-| `Shift` | Переключение между режимом полёта и интерфейсом |
+| Мышь | Направление полёта и камеры |
+| `ЛКМ` или `Space` | Основной огонь |
+| `1` | Энергетический щит |
+| `2` | Шквал |
+| `3` | Сингулярный луч |
+| `Enter` | Открыть или отправить сообщение в чат |
+| `Shift` | Переключить режим полёта и свободный курсор |
 
-В режиме полёта курсор скрыт и зафиксирован в окне. Нажмите `Shift`, чтобы освободить курсор и использовать кнопки интерфейса.
+В режиме полёта курсор скрыт и зафиксирован в окне. Нажмите `Shift`, чтобы взаимодействовать с интерфейсом или покинуть сессию.
 
-## Стек
+## Технологии
 
 | Область | Технологии |
 |---|---|
-| 3D-клиент | Three.js, GLTFLoader, WebGL |
+| 3D-клиент | Three.js, WebGL, GLTFLoader |
 | Интерфейс | HTML, CSS, JavaScript ES Modules |
-| HTTP-сервер | Fastify |
-| Real-time | Socket.IO |
+| HTTP API | Fastify 5 |
+| Real-time | Socket.IO 4 |
 | База данных | SQLite через встроенный `node:sqlite` |
-| Авторизация | `scrypt`, HttpOnly cookie sessions |
-| Сборка | Vite |
+| Безопасность | `scrypt`, HttpOnly cookie sessions |
+| Сборка | Vite 8 |
 | Развёртывание | Docker, Docker Compose |
 
 ## Архитектура
 
-```text
-Browser
-  |-- HTTP API ----------> Fastify
-  |-- Socket.IO ---------> Game loop (20 ticks/s)
-  |-- Three.js renderer
-                              |
-                              +--> SQLite
-                                   users
-                                   sessions
-                                   upgrades
-                                   settings
+```mermaid
+flowchart LR
+    A[Браузер] -->|HTTP API| B[Fastify]
+    A <-->|Socket.IO| C[Игровой сервер]
+    A --> D[Three.js renderer]
+    B --> E[(SQLite)]
+    C --> E
+    C --> F[Game loop 20 ticks/s]
+    F --> C
 ```
 
-Основные файлы:
+Сервер является источником истины для здоровья, опыта, астероидов, попаданий и перезарядки способностей. Клиент отвечает за ввод, интерполяцию и визуальные эффекты.
 
 ```text
 .
-|-- server.js                 # Fastify, API, SQLite и Socket.IO
-|-- src/main.js               # Экраны авторизации и главного меню
-|-- src/game/SpaceGame.js     # Three.js-сцена и управление
-|-- models/scout.glb          # Модель корабля
-|-- index.html
-|-- style.css
-|-- Dockerfile
-`-- compose.yaml
+├── server.js                 # Fastify, SQLite, Socket.IO и игровой цикл
+├── src/main.js               # Авторизация, меню, настройки и прогресс
+├── src/game/SpaceGame.js     # Three.js-сцена, HUD и управление
+├── models/scout.glb          # GLB-модель корабля
+├── index.html                # Разметка интерфейса
+├── style.css                 # Визуальный стиль и адаптивный HUD
+├── Dockerfile
+└── compose.yaml
 ```
 
 ## Локальный запуск
 
-Требуется Node.js 22 или новее.
+Требуется **Node.js 22+**.
 
 ```bash
-git clone https://github.com/500EFKA500/ThreeJs.git
+git clone -b Skills+ https://github.com/500EFKA500/ThreeJs.git
 cd ThreeJs
 npm install
 npm start
 ```
 
-Откройте:
+Откройте [http://localhost:7000](http://localhost:7000).
 
-```text
-http://localhost:7000
-```
-
-Для разработки с автоматическим перезапуском:
+Для разработки с автоматическим перезапуском сервера:
 
 ```bash
 npm run dev
@@ -118,97 +140,15 @@ npm run build
 ```bash
 docker compose up -d --build
 docker compose ps
-docker compose logs -f
 ```
 
-Приложение будет доступно на порту `7000`.
-
-Чтобы использовать другой внешний порт:
-
-```bash
-cp .env.example .env
-```
-
-Измените `.env`:
-
-```dotenv
-APP_PORT=8080
-```
-
-Затем:
-
-```bash
-docker compose up -d --build
-```
-
-Внутри контейнера сервер продолжит работать на `7000`, а снаружи будет доступен на `8080`.
-
-## Как работает база данных
-
-SQLite не требует отдельного контейнера или отдельного сервера БД.
-
-Файл базы создаётся автоматически:
-
-```text
-/app/data/space-command.db
-```
-
-Docker Compose подключает к `/app/data` постоянный named volume:
-
-```text
-space-command-data
-```
-
-Поэтому следующие команды не удаляют аккаунты:
-
-```bash
-docker compose restart
-docker compose down
-docker compose up -d --build
-```
-
-Не выполняйте `docker compose down -v`, если хотите сохранить базу. Параметр `-v` удалит volume вместе с аккаунтами.
-
-## Развёртывание на SSH-сервере
-
-Ниже пример для Linux-сервера с установленными Git, Docker Engine и Docker Compose plugin. Актуальную инструкцию установки Docker для вашего дистрибутива используйте с официального сайта:
-
-- Ubuntu: https://docs.docker.com/engine/install/ubuntu/
-- Debian: https://docs.docker.com/engine/install/debian/
-
-### 1. Подключитесь к серверу
-
-```bash
-ssh USER@SERVER_IP
-```
-
-### 2. Загрузите проект
-
-```bash
-git clone https://github.com/500EFKA500/ThreeJs.git
-cd ThreeJs
-```
-
-Если репозиторий приватный, используйте SSH URL:
-
-```bash
-git clone git@github.com:500EFKA500/ThreeJs.git
-```
-
-### 3. Запустите приложение
-
-```bash
-docker compose up -d --build
-docker compose ps
-```
-
-Проверьте состояние:
+Проверить состояние сервера:
 
 ```bash
 curl http://127.0.0.1:7000/api/health
 ```
 
-Ожидаемый ответ:
+Пример ответа:
 
 ```json
 {
@@ -218,131 +158,34 @@ curl http://127.0.0.1:7000/api/health
 }
 ```
 
-### 4. Откройте порт
+По умолчанию приложение доступно на порту `7000`. Внешний порт можно изменить в `.env`:
 
-Для Ubuntu с UFW:
-
-```bash
-sudo ufw allow 7000/tcp
-sudo ufw status
+```dotenv
+APP_PORT=8080
 ```
 
-После этого игра доступна по адресу:
+## Хранение данных
+
+SQLite создаётся автоматически и не требует отдельного контейнера. В Docker база находится по адресу:
 
 ```text
-http://SERVER_IP:7000
+/app/data/space-command.db
 ```
 
-Если сервер находится у облачного провайдера, порт также нужно разрешить в его Security Group или сетевом firewall.
+Compose подключает постоянный именованный volume `space-command-data`, поэтому пересборка контейнера не удаляет аккаунты и прогресс.
 
-## Домен, Nginx и HTTPS
-
-Для публичного сервера рекомендуется не открывать `7000` напрямую, а использовать Nginx и HTTPS. Socket.IO требует передачи заголовков WebSocket.
-
-Пример `/etc/nginx/sites-available/space-command`:
-
-```nginx
-server {
-    listen 80;
-    server_name game.example.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:7000;
-        proxy_http_version 1.1;
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-
-        proxy_read_timeout 60s;
-        proxy_send_timeout 60s;
-    }
-}
-```
-
-Включите конфигурацию:
-
-```bash
-sudo ln -s /etc/nginx/sites-available/space-command /etc/nginx/sites-enabled/space-command
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-После настройки DNS установите HTTPS через Certbot:
-
-```bash
-sudo certbot --nginx -d game.example.com
-```
-
-Официальная документация Certbot: https://certbot.eff.org/
+> [!WARNING]
+> Не запускайте `docker compose down -v`, если хотите сохранить базу данных. Флаг `-v` удалит volume вместе с аккаунтами.
 
 ## Обновление сервера
 
 ```bash
-ssh USER@SERVER_IP
-cd ThreeJs
 git pull
 docker compose up -d --build
-docker image prune -f
-```
-
-Docker Compose пересоздаст контейнер, но подключит существующий volume с базой данных.
-
-## Резервное копирование БД
-
-### Создать backup
-
-```bash
-docker compose stop
-docker run --rm \
-  -v space-command-data:/data \
-  -v "$PWD":/backup \
-  alpine \
-  tar czf /backup/space-command-data.tar.gz -C /data .
-docker compose start
-```
-
-Файл `space-command-data.tar.gz` появится в текущем каталоге.
-
-### Восстановить backup
-
-```bash
-docker compose down
-docker run --rm \
-  -v space-command-data:/data \
-  -v "$PWD":/backup \
-  alpine \
-  sh -c "rm -rf /data/* && tar xzf /backup/space-command-data.tar.gz -C /data && chown -R 1000:1000 /data"
-docker compose up -d
-```
-
-Перед восстановлением убедитесь, что backup существует и относится к нужному серверу.
-
-## Полезные команды
-
-```bash
-# Статус контейнера
 docker compose ps
-
-# Логи
-docker compose logs -f --tail=200
-
-# Перезапуск
-docker compose restart
-
-# Остановка без удаления БД
-docker compose down
-
-# Проверка health endpoint
-curl http://127.0.0.1:7000/api/health
-
-# Просмотр volume
-docker volume inspect space-command-data
 ```
+
+Контейнер имеет встроенный healthcheck и автоматически перезапускается после перезагрузки сервера.
 
 ## HTTP API
 
@@ -350,57 +193,18 @@ docker volume inspect space-command-data
 |---|---|---|
 | `GET` | `/api/health` | Состояние сервера |
 | `POST` | `/api/auth/register` | Регистрация |
-| `POST` | `/api/auth/login` | Вход |
+| `POST` | `/api/auth/login` | Авторизация |
 | `POST` | `/api/auth/logout` | Выход |
 | `GET` | `/api/me` | Данные текущего аккаунта |
-| `PATCH` | `/api/settings` | Сохранение настроек |
-| `POST` | `/api/upgrade` | Улучшение корабля |
-
-## Решение проблем
-
-### `EADDRINUSE: address already in use`
-
-Порт `7000` уже занят другим процессом или контейнером.
-
-```bash
-docker compose ps
-sudo ss -ltnp | grep :7000
-```
-
-Остановите старый контейнер или задайте другой `APP_PORT` в `.env`.
-
-### Контейнер не становится healthy
-
-```bash
-docker compose logs --tail=200
-docker inspect space-command
-curl http://127.0.0.1:7000/api/health
-```
-
-### После обновления пропали аккаунты
-
-Проверьте наличие volume:
-
-```bash
-docker volume ls | grep space-command-data
-docker volume inspect space-command-data
-```
-
-Не запускайте `docker compose down -v` на production-сервере.
-
-### Socket.IO не подключается через домен
-
-Убедитесь, что Nginx передаёт `Upgrade` и `Connection`, а `proxy_pass` указывает на правильный порт.
-
-## Безопасность production-сервера
-
-- Используйте HTTPS.
-- Не публикуйте SSH-ключи, `.env` и резервные копии БД.
-- Разрешите SSH-вход по ключу и отключите вход root по паролю.
-- Регулярно обновляйте Docker и операционную систему.
-- Храните резервные копии вне сервера.
-- Не открывайте порт `7000`, если приложение доступно через Nginx.
+| `PATCH` | `/api/settings` | Настройки интерфейса |
+| `POST` | `/api/upgrade` | Улучшение модулей корабля |
 
 ## Лицензия
 
 Проект распространяется по лицензии [MIT](LICENSE).
+
+<div align="center">
+
+**SPACE COMMAND // ENTER THE SECTOR**
+
+</div>
